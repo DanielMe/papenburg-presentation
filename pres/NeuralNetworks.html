@@ -1,0 +1,449 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>Neural Networks</title>
+
+		<link rel="stylesheet" href="../css/reveal.css">
+		<link rel="stylesheet" href="../css/theme/solarized.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="../lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? '../css/print/pdf.css' : '../css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+		<script src="../lib/js/head.min.js"></script>
+		<script src="../js/reveal.js"></script>
+		<script src="../js/d3.min.js"></script>
+		<script src="../js/math.min.js"></script>
+
+		<style>
+			.chart path {
+				stroke: steelblue;
+				fill: none;
+				stroke-width: 5px;
+			}
+
+			.chart circle {
+				stroke: none;
+				fill: #cb4b16;
+				stroke-width: 2px;
+
+			}
+
+			.chart text {
+				fill: #002b36;
+				font: 15px sans-serif;
+				text-anchor: end;
+			}
+
+			.chart line {
+			  fill: none;
+			  stroke: #cb4b16;
+			  stroke-width: 5px;
+			}
+
+
+			.axis text {
+			  font: 10px sans-serif;
+			}
+
+			.chart circle.A {
+				fill: blue;
+			}
+			.chart circle.B {
+				fill: green;
+			}
+
+
+			.axis path,
+			.axis line {
+			  fill: none;
+			  stroke: #000;
+			  shape-rendering: crispEdges;
+			}
+		</style>					
+
+	</head>
+
+<script type="text/javascript">
+	function drawGradientStep(target, step) {
+		var height = 400, width = 600;
+		var startPoint = 50;
+		var alpha = 0.000005;
+		function f(i) { return Math.pow(i-300,4) - 30000*Math.pow(i-200,2); }
+		function df(i) { return 4*Math.pow(i-300,3) - 60000*(i-200); }
+		var data = d3.range(width).map( f );
+		var yScale = d3.scaleLinear()
+			.domain([d3.min(data),d3.max(data)])
+	       	.range([height-10,0]);
+		var svg = d3.select(target).selectAll('svg').data([0]).enter().append("svg")
+		svg.attr( "width", width ).attr( "height", height).attr( "class", 'chart');
+		var line = d3.line().curve(d3.curveBasis)
+			.x(function(d,i) { return i; })
+			.y(function(d,i) { return yScale(d); });
+		svg.append("path")
+		      .attr("class", "line")
+		      .attr("d", line(data));
+
+		if(step >= 1){
+			function drawCurrentDirection(currentX) {
+
+				var dx = alpha * df(currentX)
+				svg.append("line").attr("x1",currentX).attr("y1",yScale(f(currentX)))
+					.attr("x2", currentX - dx).attr("y2", yScale(f(currentX - dx)))
+				svg.append("circle").attr("cx",currentX).attr("cy",yScale(f(currentX))).attr("r",10)
+
+			}
+			var currentX = startPoint;
+
+			for (i = 1; i < step; i++) { 
+			    currentX -= alpha * df(currentX)
+			}
+
+			drawCurrentDirection(currentX)
+		}
+
+		return svg;
+
+	}
+
+
+	function drawNeuralNet(target, edgeLabel) {
+		var svg = d3.select(target).selectAll('svg').data([0]).enter().append("svg");
+		var height = 400, width = 460;
+		svg.attr( "width", width ).attr( "height", height).attr( "class", 'chart');
+		var x1 = 30;
+		var x2 = 430;
+		var numLayer1 = 4;
+		var numLayer2 = 2;
+
+		for(i = 0; i < numLayer1; i+=1) {
+			for(j = 0; j < numLayer2; j+=1 ) {
+				y1 = (i+1)*(height / (numLayer1 + 1))
+				y2 = (j+1)*(height / (numLayer2 + 1))
+
+				var makePath = d3.line().x(function(d) {return d.x;}).y(function(d) {return d.y})
+				svg.append("path")
+					.attr("d", makePath([{x:x1, y:y1},{x:x2,y:y2}]) )
+					.attr("id","_networkpath_"+i+"_"+j);
+				svg.append("text")
+					.attr("style","text-anchor:middle;")
+					.attr("dy",-5)
+					.append("textPath")
+					.attr("xlink:href", "#_networkpath_"+i+"_"+j)
+					.attr("startOffset", "20%")
+					.text(edgeLabel(i,j))
+			}
+			svg.append("circle").attr("cx",x1).attr("cy",y1).attr("r",25);
+
+		}
+		for(j = 0; j < numLayer2; j+=1 ) {
+			y2 = (j+1)*(height / (numLayer2 + 1))
+			svg.append("circle").attr("cx",x2).attr("cy",y2).attr("r",25);
+		}
+		return svg;
+
+
+	}
+
+	function perceptron(data) {
+		var stepsize = 1;
+		var result = math.random([3]);
+
+		for (i = 0; i < 100; i++) {
+			for (j = 0; j < data.length; j++) {
+				var currentPoint = [data[j].x, data[j].y, 1];
+				var currentTarget = 1;
+				if(data[j].class == "B") { currentTarget = -1; }
+				var netOutput = math.dot(result, currentPoint)
+				if(netOutput*currentTarget < 0) {
+					result = math.add(result, math.multiply(stepsize * currentTarget, currentPoint));
+				}
+			}
+		}
+
+		return result;
+	}
+
+	function drawLinearClassification(target, calculateLine, showNormal=false) {
+		var svg = d3.select(target).selectAll('svg').data([0]).enter().append("svg");
+		var height = 400, width = 400;
+		svg.attr( "width", width ).attr( "height", height).attr( "class", 'chart');
+
+		var data = [
+			{x: 1, y: 2, class: "A"},
+			{x: 2, y: 3, class: "A"},
+			{x: 4, y: 1, class: "A"},
+			{x: 6, y: 6, class: "A"},
+			{x: 5, y: 7, class: "B"},
+			{x: 9, y: 9, class: "B"},
+			{x: 3, y: 7, class: "B"}
+		];
+
+
+		var minX = d3.min(data, function(d) {return d.x;});
+		var maxX = d3.max(data, function(d) {return d.x;});
+		var minY = d3.min(data, function(d) {return d.y;});
+		var maxY = d3.max(data, function(d) {return d.y;});
+
+		var scale = d3.scaleLinear().domain([math.min(minX,minY),math.max(maxX,maxY)]).range([20,width-20]);
+
+		svg.selectAll("circle").data(data)
+			.enter().append("circle")
+			.attr("class", function (d) {return d.class; } )
+			.attr("r", 8)
+			.attr("cx", function (d) {return scale(d.x); })
+			.attr("cy", function (d) {return scale(d.y); });
+
+		var lineParams = calculateLine(data);
+
+		var leftY = -lineParams[2]/lineParams[1];
+		var rightY = - (lineParams[2]+lineParams[0]*maxX)/lineParams[1];
+
+		svg.append("line").attr("x1",scale(0)).attr("y1",scale(leftY))
+						.attr("x2",scale(maxX)).attr("y2",scale(rightY))
+
+
+		if(showNormal){
+			var normX1 = (minX + maxX) / 2;
+			var normY1 = - (lineParams[2]+lineParams[0]*normX1)/lineParams[1];
+
+			var normX2 = normX1 + 0.5*lineParams[0];
+			var normY2 = normY1 + 0.5*lineParams[1];
+
+			svg.append("svg:defs")
+			 .append("svg:marker")
+			  .attr("id", "arrow")
+			    .attr("viewBox", "0 -5 10 10")
+			    .attr("markerWidth", 5)
+			    .attr("markerHeight", 10)
+			    .attr("orient", "auto")
+			  .append("svg:path")
+			    .attr("d", "M0,0 V4 L2,2 Z");
+
+
+			svg.append("line").attr("x1",scale(normX1)).attr("y1",scale(normY1))
+							.attr("x2",scale(normX2)).attr("y2",scale(normY2))
+							.attr("style","stroke: steelblue;")
+							.attr("marker-end", "url(#arrow)")
+
+
+		}
+
+		return svg;
+	}
+
+</script>
+
+
+
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section><h3>Was sind Kriterien für eine gute Klassifizierung?</h3></section>
+				<section>
+					<script type="text/javascript">
+						Reveal.addEventListener( 'linear-classifier-1', function () { 
+							drawLinearClassification("#linear-classifier-1", perceptron);
+						} );
+						Reveal.addEventListener( 'linear-classifier-2', function () { 
+							drawLinearClassification("#linear-classifier-2", perceptron, true);
+						} );
+
+					</script>
+
+					<section data-state="linear-classifier-1">
+						<h3>Lineare Klassifizierung</h3>
+						<p>Wir ziehen eine Gerade durch die Daten.</p>
+						<div id="linear-classifier-1"></div>
+					</section>
+					<section data-state="linear-classifier-2">
+						<p>Gerade wird beschrieben durch</p>
+						<ul>
+							<li>einen Vektor $w$ der senkrecht zur Geraden steht</li>
+							<li>ein Abstandsmaß $w_0$</li>
+						</ul>
+						<div id="linear-classifier-2"></div>
+						<p>Abstand zum Ursprung definiert als $- \frac {w_0} {|w|} $.</p>
+
+					</section>
+					<section>
+						<p>Wenn Punkt $x_p$ auf der Geraden dann</p>
+						<p>$w^T x_p + w_0 = 0$</p>
+					</section>
+					<section>
+						<p>Abstand eines Punktes $x$ von der Geraden ist</p>
+						<p>$\frac {w^T x + w_0} {|w|}$</p>
+					</section>
+				</section>
+				<section>
+					<h3>Nach welcher Regel sollten wir die Gerade legen?</h3>
+					<p>Beispiel: Wähle $w$ und $w_0$ so, dass mindestens ein Punkt der einen Klasse auf der einen und mindestens ein Punkt der anderen Klasse auf der anderen Seite liegt.</p>
+				</section>
+				<section>
+					<section>
+						<p>Lege die Gerade so, dass möglichst wenige Punkte falsch klassifiziert werden.</p>
+					</section>
+					<section>
+						<h3>Kostenfunction:</h3>
+						<p>
+							$E(w,w_0) = \sum_i (w^T x_i + w_0 - t_i)^2$
+						</p>
+						<p>
+							Wobei $t_i$ entweder $1$ oder $-1$ ist, je nach Klasse des Datenpunktes $i$. 
+						</p>
+					</section>
+					<section>
+						<h3>Kostenfunction Minimieren:</h3>
+						<p>Wir können die Funktion in Matrix Form aufschreiben:</p>
+						<p>
+							$E(\tilde w) = \frac 1 2 (w^T x_i + w_0 - t_i)^2$
+						</p>
+					</section>
+					<section>
+						<h3>Kostenfunction Minimieren:</h3>
+						<p>
+							$\nabla E(w,w_0) = \sum_i 2(w^T x_i + w_0 - t_i)(\mathbf 1^T x_i) = 0$
+						</p>
+						<p>
+							$E^{\prime}(w,w_0) = \sum_i 2(w^T x_i + w_0 - t_i)(\mathbf 1^T x_i) = 0$
+						</p>
+
+					</section>
+
+				</section>
+				<section>
+					<section>
+						<p>Lege die Gerade so, dass ein möglichst breiter Saum die Gerade von den Punkten trennt.</p>
+					</section>
+				</section>
+				<section>
+					<h3>Kern der Linearen Klassifizierung:</h3>
+					<ul>
+						<li>Lege eine Gerade (Ebene,...) um Punkte verschiedener Klassen zu unterscheiden.</li>
+						<li>Hierzu gibt es verschiedene Strategien.</li>
+						<li>Um die genauen Koordinaten so einer Gerade zu finden löst man meist ein Optimierungsproblem.</li>
+					</ul>
+				</section>
+
+
+				<section><h3>Neural Networks</h3></section>
+				<section>
+					<script type="text/javascript">
+						Reveal.addEventListener( 'neural-net-1', function () { 
+							drawNeuralNet("#exampleNetwork-1", function(i,j) {return "w"+i+j});
+						} );
+					</script>
+
+					<section>
+	    				<h3>Natürlichen Neuronale Netze...</h3>
+	    				<ul>
+	    					<li>Vielzahl miteinander verbundener Neuronen</li>
+	    					<li>Neuronen werden aktiviert und aktivieren selbst andere Neuronen</li>
+	    					<li>Das Netzwerk lernt durch Stärken/Schwächen von Verbindungen</li>
+	    				</ul>
+					</section>
+					<section data-state="neural-net-1">
+
+	    				<h3>... können als Inspiration dienen</h3>
+	    				<div id="exampleNetwork-1"></div>
+					</section>
+				</section>
+				<section>
+					<h3>Perceptron</h3>
+    				<ul>
+    					<li>Ein Beispiel für ein Machine Learning Verfahren</li>
+    					<li>Neuronen werden aktiviert und aktivieren selbst andere Neuronen</li>
+    					<li>Das Netzwerk lernt durch Stärken/Schwächen von Verbindungen</li>
+    				</ul>
+
+				</section>
+				<section>
+					<script type="text/javascript">
+						Reveal.addEventListener( 'gradient-descent-slide-1', function () { 
+							drawGradientStep("#gradientDescentGraph-1",0);
+						} );
+						Reveal.addEventListener( 'gradient-descent-slide-2', function () { 
+							drawGradientStep("#gradientDescentGraph-2",1);
+						} );
+
+						Reveal.addEventListener( 'gradient-descent-slide-3', function () { 
+							drawGradientStep("#gradientDescentGraph-3",2);
+						} );
+
+						Reveal.addEventListener( 'gradient-descent-slide-4', function () { 
+							drawGradientStep("#gradientDescentGraph-4",3);
+						} );
+						Reveal.addEventListener( 'gradient-descent-slide-5', function () { 
+							drawGradientStep("#gradientDescentGraph-5",4);
+						} );
+						Reveal.addEventListener( 'gradient-descent-slide-6', function () { 
+							drawGradientStep("#gradientDescentGraph-6",5);
+						} );
+
+					</script>					
+
+					<section data-state="gradient-descent-slide-1">
+					    <h2>Gradient Descent</h2>
+					    <p>Was tun, um das Minimum dieser Funktion zu finden?</p>
+					    <div id="gradientDescentGraph-1"></div>
+					</section>
+					<section data-state="gradient-descent-slide-2">
+					    <h2>Gradient Descent</h2>
+					    <p>Einen beliebigen Punkt wählen und die Richtung bestimmen wo es am steilsten bergab geht (Gradient).</p>
+					    <div id="gradientDescentGraph-2"></div>
+					</section>
+					<section data-state="gradient-descent-slide-3">
+					    <h2>Gradient Descent</h2>
+					    <p>Einen Schritt in diese Richtung tun und erneut die Richtung bestimmen.</p>
+					    <div id="gradientDescentGraph-3"></div>
+					</section>
+					<section data-state="gradient-descent-slide-4">
+					    <h2>Gradient Descent</h2>
+					    <p>Diesen Prozess wiederholen.</p>
+					    <div id="gradientDescentGraph-4"></div>
+					</section>
+					<section data-state="gradient-descent-slide-5">
+					    <h2>Gradient Descent</h2>
+					    <p>Diesen Prozess wiederholen.</p>
+					    <div id="gradientDescentGraph-5"></div>
+					</section>
+					<section data-state="gradient-descent-slide-6">
+					    <h2>Gradient Descent</h2>
+					    <p>Diesen Prozess wiederholen.</p>
+					    <div id="gradientDescentGraph-6"></div>
+					</section>
+
+				</section>
+				<section>Backpropagation</section>
+
+			</div>
+		</div>
+
+		<script>
+			// More info https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				history: true,
+
+				// More info https://github.com/hakimel/reveal.js#dependencies
+				dependencies: [
+					{ src: '../plugin/markdown/marked.js' },
+					{ src: '../plugin/markdown/markdown.js' },
+					{ src: '../plugin/notes/notes.js', async: true },
+       				{ src: '../plugin/math/math.js', async: true },
+
+					{ src: '../plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+				]
+			});
+		</script>
+	</body>
+</html>
