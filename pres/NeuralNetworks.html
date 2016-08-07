@@ -117,49 +117,199 @@
 	}
 
 
-	function drawNeuralNet(target, edgeLabel) {
+	function drawNeuralNet(target, numLayer1 = 4, numLayer2 = 2, numLayer3 = 0) {
 		var svg = d3.select(target).selectAll('svg').data([0]).enter().append("svg");
-		var height = 400, width = 460;
+		var height = 450, width = 600;
 		svg.attr( "width", width ).attr( "height", height).attr( "class", 'chart');
-		var x1 = 30;
-		var x2 = 430;
-		var numLayer1 = 4;
-		var numLayer2 = 2;
 
-		for(i = 0; i < numLayer1; i+=1) {
+		var xLayer1 = 30;
+		var xLayer2 = 570;
+		if(numLayer3 > 0) {
+			var xLayer3 = 570;
+			var xLayer2 = 300;
+		}
+
+		var edges = [];
+		for(i = 0; i < numLayer1; i+=1){
 			for(j = 0; j < numLayer2; j+=1 ) {
-				y1 = (i+1)*(height / (numLayer1 + 1))
-				y2 = (j+1)*(height / (numLayer2 + 1))
+				var edge =
+				edges.push({
+					x1: xLayer1,
+					x2: xLayer2,
+					y1: (i+1)*(height / (numLayer1 + 1)),
+					y2: (j+1)*(height / (numLayer2 + 1)),
+					id: "_edge_layer_1_"+i+"_"+j,
+					label: "w_"+i+j,
+					value: 1,
+					layer: 0,
+					from: i,
+					to: j
+				});
+			}
+		}
+		for(i = 0; i < numLayer2; i+=1){
+			for(j = 0; j < numLayer3; j+=1 ) {
+				edges.push({
+					x1: xLayer2,
+					x2: xLayer3,
+					y1: (i+1)*(height / (numLayer2 + 1)),
+					y2: (j+1)*(height / (numLayer3 + 1)),
+					id: "_edge_layer_2_"+i+"_"+j,
+					label: "v_"+i+j,
+					value: 1,
+					layer: 1,
+					from: i,
+					to: j
+				});
+			}
+		}
 
-				var makePath = d3.line().x(function(d) {return d.x;}).y(function(d) {return d.y})
-				svg.append("path")
-					.attr("d", makePath([{x:x1, y:y1},{x:x2,y:y2}]) )
-					.attr("id","_networkpath_"+i+"_"+j);
-				svg.append("text")
+		var nodes = [];
+		for(i = 0; i < numLayer1; i+=1 ) {
+			nodes.push({
+				x: xLayer1,
+				y: (i+1)*(height / (numLayer1 + 1)),
+				label: "i_"+i,
+				value: 0,
+				input: 0,
+				layer: 0,
+				index: i
+			})
+		}
+
+		for(i = 0; i < numLayer2; i+=1 ) {
+			nodes.push({
+				x: xLayer2,
+				y: (i+1)*(height / (numLayer2 + 1)),
+				label: "z_"+i,
+				value: 0.5,
+				input: 0,
+				layer: 1,
+				index: i
+			})
+		}
+
+		for(i = 0; i < numLayer3; i+=1 ) {
+			nodes.push({
+				x: xLayer3,
+				y: (i+1)*(height / (numLayer3 + 1)),
+				label: "o_"+i,
+				value: 0.5,
+				input: 0,
+				layer: 2,
+				index: i
+			})
+		}
+		nodeScale=d3.scaleLinear().domain([0,1]).range(["red", "blue"]);
+		edgeScale=d3.scaleLinear().domain([-1,1]).range(["red", "green"]);
+
+		function sigmoid(x) {
+			return 1 / (1+Math.pow(Math.E, -x));
+		}
+
+		function propagate() {
+			console.log("propagate!");
+
+			for(j = 0; j < numLayer2; j+=1){
+				var to = nodes.find(function(n){return n.layer==1 && n.index==j});
+				to.input = 0;
+				for(i = 0; i < numLayer1; i+=1){
+					var edge = edges.find(function(e){return e.layer==0 && e.from==i && e.to==j;});
+					var from = nodes.find(function(n){return n.layer==0 && n.index==i});
+					to.input += from.value * edge.value;
+				}
+				to.value = sigmoid(to.input);
+			}
+			for(j = 0; j < numLayer3; j+=1){
+				var to = nodes.find(function(n){return n.layer==2 && n.index==j});
+				to.input = 0;
+				for(i = 0; i < numLayer2; i+=1){
+					var edge = edges.find(function(e){return e.layer==1 && e.from==i && e.to==j;});
+					var from = nodes.find(function(n){return n.layer==1 && n.index==i});
+					to.input += from.value * edge.value;
+				}
+				to.value = sigmoid(to.input);
+			}
+
+		}
+
+		var makePath = d3.line().x(function(d) {return d.x;}).y(function(d) {return d.y;})
+		function update() {
+			svg.selectAll("path").data(edges)
+				.attr("style", function(d) { return "stroke: "+edgeScale(d.value)+";";})
+				.enter()
+					.append("path")
+					.attr("d", function(d) { return makePath([{x:d.x1, y:d.y1},{x:d.x2,y:d.y2}]); } )
+					.attr("id",function(d) { return d.id; } )
+					.attr("style", function(d) { return "stroke: "+edgeScale(d.value)+";";})
+					.on("click", function(d) { 
+						d.value += 0.2;
+						propagate();
+						update();
+					})
+					.on("contextmenu", function(d) {
+						d3.event.preventDefault();
+						d.value -= 0.2;
+						propagate();
+						update();
+					});
+
+			svg.selectAll("text").data(edges)
+				.enter()
+					.append("text")
 					.attr("style","text-anchor:middle;")
 					.attr("dy",-5)
 					.append("textPath")
-					.attr("xlink:href", "#_networkpath_"+i+"_"+j)
-					.attr("startOffset", "20%")
-					.text(edgeLabel(i,j))
-			}
-			svg.append("circle").attr("cx",x1).attr("cy",y1).attr("r",25);
+					.attr("xlink:href", function(d) {return "#"+d.id;})
+					.attr("startOffset", "50%")
+					.text(function(d) {return d.label;})
+					.on("click", function(d) { 
+						d.value += 0.2;
+						propagate();
+						update();
+					})
+					.on("contextmenu", function(d) {
+						d3.event.preventDefault();
+						d.value -= 0.2;
+						propagate();
+						update();
+					});
 
+			svg.selectAll("circle").data(nodes)
+				.attr("style", function(d) { return "fill: "+nodeScale(d.value)+";";})
+				.enter()
+					.append("circle")
+					.attr("style", function(d) { return "fill: "+nodeScale(d.value)+";";})
+					.attr("cx",function(d) {return d.x;})
+					.attr("cy",function(d) {return d.y;})
+					.attr("r",25)
+					.on("click", function(d) { 
+						if(d.layer == 0){
+							d.value += 0.2;
+							propagate();
+							update();
+						}
+					})
+					.on("contextmenu", function(d) {
+						d3.event.preventDefault();
+						if(d.layer == 0){
+							d.value -= 0.2;
+							propagate();
+							update();
+						}
+					});
 		}
-		for(j = 0; j < numLayer2; j+=1 ) {
-			y2 = (j+1)*(height / (numLayer2 + 1))
-			svg.append("circle").attr("cx",x2).attr("cy",y2).attr("r",25);
-		}
+		propagate();
+		update();
 		return svg;
-
 
 	}
 
 	function perceptron(data) {
-		var stepsize = 1;
+		var stepsize = 0.1;
 		var result = math.random([3]);
 
-		for (i = 0; i < 100; i++) {
+		for (i = 0; i < 1000; i++) {
 			for (j = 0; j < data.length; j++) {
 				var currentPoint = [data[j].x, data[j].y, 1];
 				var currentTarget = 1;
@@ -176,7 +326,7 @@
 
 	function drawLinearClassification(target, calculateLine, showNormal=false) {
 		var svg = d3.select(target).selectAll('svg').data([0]).enter().append("svg");
-		var height = 400, width = 400;
+		var height = 450, width = 450;
 		svg.attr( "width", width ).attr( "height", height).attr( "class", 'chart');
 
 		var data = [
@@ -197,47 +347,77 @@
 
 		var scale = d3.scaleLinear().domain([math.min(minX,minY),math.max(maxX,maxY)]).range([20,width-20]);
 
-		svg.selectAll("circle").data(data)
-			.enter().append("circle")
-			.attr("class", function (d) {return d.class; } )
-			.attr("r", 8)
-			.attr("cx", function (d) {return scale(d.x); })
-			.attr("cy", function (d) {return scale(d.y); });
+		function update(data) {
+			svg.selectAll("circle").data(data)
+				.enter()
+					.append("circle")
+					.attr("class", function (d) {return d.class; } )
+					.attr("r", 8)
+					.attr("cx", function (d) {return scale(d.x); })
+					.attr("cy", function (d) {return scale(d.y); })
+				.exit().remove();
 
-		var lineParams = calculateLine(data);
+			var lineParams = calculateLine(data);
 
-		var leftY = -lineParams[2]/lineParams[1];
-		var rightY = - (lineParams[2]+lineParams[0]*maxX)/lineParams[1];
+			var leftY = -lineParams[2]/lineParams[1];
+			var rightY = - (lineParams[2]+lineParams[0]*maxX)/lineParams[1];
 
-		svg.append("line").attr("x1",scale(0)).attr("y1",scale(leftY))
-						.attr("x2",scale(maxX)).attr("y2",scale(rightY))
-
-
-		if(showNormal){
-			var normX1 = (minX + maxX) / 2;
-			var normY1 = - (lineParams[2]+lineParams[0]*normX1)/lineParams[1];
-
-			var normX2 = normX1 + 0.5*lineParams[0];
-			var normY2 = normY1 + 0.5*lineParams[1];
-
-			svg.append("svg:defs")
-			 .append("svg:marker")
-			  .attr("id", "arrow")
-			    .attr("viewBox", "0 -5 10 10")
-			    .attr("markerWidth", 5)
-			    .attr("markerHeight", 10)
-			    .attr("orient", "auto")
-			  .append("svg:path")
-			    .attr("d", "M0,0 V4 L2,2 Z");
+			svg.selectAll("#separator").data([lineParams])
+					.attr("x1",scale(0)).attr("y1",scale(leftY))
+					.attr("x2",scale(maxX)).attr("y2",scale(rightY))
+				.enter()
+					.append("line").attr("x1",scale(0)).attr("y1",scale(leftY))
+					.attr("x2",scale(maxX)).attr("y2",scale(rightY))
+					.attr("id", "separator");
 
 
-			svg.append("line").attr("x1",scale(normX1)).attr("y1",scale(normY1))
-							.attr("x2",scale(normX2)).attr("y2",scale(normY2))
-							.attr("style","stroke: steelblue;")
-							.attr("marker-end", "url(#arrow)")
+			if(showNormal){
+				var normX1 = (minX + maxX) / 2;
+				var normY1 = - (lineParams[2]+lineParams[0]*normX1)/lineParams[1];
 
+				var normX2 = normX1 + 1.3*lineParams[0]/lineParams[2];
+				var normY2 = normY1 + 1.3*lineParams[1]/lineParams[2];
 
+				svg.append("svg:defs")
+				 .append("svg:marker")
+				  .attr("id", "arrow")
+				    .attr("viewBox", "0 -5 10 10")
+				    .attr("markerWidth", 5)
+				    .attr("markerHeight", 10)
+				    .attr("orient", "auto")
+				    .attr("refX", 0.1)
+				    .attr("refY", 2)
+				  .append("svg:path")
+				    .attr("d", "M0,0 V4 L2,2 Z");
+
+				svg.selectAll("#normal").data(lineParams)
+						.attr("x1",scale(normX1)).attr("y1",scale(normY1))
+						.attr("x2",scale(normX2)).attr("y2",scale(normY2))
+					.enter().append("line").attr("x1",scale(normX1)).attr("y1",scale(normY1))
+								.attr("x2",scale(normX2)).attr("y2",scale(normY2))
+								.attr("style","stroke: steelblue;")
+								.attr("marker-end", "url(#arrow)")
+								.attr("id", "normal");
+
+			}
 		}
+
+		update(data);
+
+	    svg.on('click', function() {
+	        var coords = d3.mouse(this);
+	        data.push({x: scale.invert(coords[0]), y: scale.invert(coords[1]), class: "A"});
+	        update(data);
+		});
+
+		svg.on("contextmenu", function (d, i) {
+            d3.event.preventDefault();
+           	var coords = d3.mouse(this);
+           	data.push({x: scale.invert(coords[0]), y: scale.invert(coords[1]), class: "B"});
+
+           	update(data);
+        });
+
 
 		return svg;
 	}
@@ -255,9 +435,25 @@
 						Reveal.addEventListener( 'linear-classifier-1', function () { 
 							drawLinearClassification("#linear-classifier-1", perceptron);
 						} );
+						Reveal.addEventListener( 'linear-classifier-1b', function () { 
+							drawLinearClassification("#linear-classifier-1b", perceptron);
+						} );
+
 						Reveal.addEventListener( 'linear-classifier-2', function () { 
 							drawLinearClassification("#linear-classifier-2", perceptron, true);
 						} );
+						Reveal.addEventListener( 'linear-classifier-3', function () { 
+							drawLinearClassification("#linear-classifier-3", perceptron, true);
+						} );
+
+						Reveal.addEventListener( 'linear-classifier-4', function () { 
+							drawLinearClassification("#linear-classifier-4", perceptron, true);
+						} );
+
+						Reveal.addEventListener( 'linear-classifier-5', function () { 
+							drawLinearClassification("#linear-classifier-5", perceptron, true);
+						} );
+
 
 					</script>
 
@@ -266,105 +462,81 @@
 						<p>Wir ziehen eine Gerade durch die Daten.</p>
 						<div id="linear-classifier-1"></div>
 					</section>
+					<section data-state="linear-classifier-1b">
+						<p>Wie könnten wir so eine Gerade beschreiben?</p>
+						<div id="linear-classifier-1b"></div>
+					</section>
+
 					<section data-state="linear-classifier-2">
-						<p>Gerade wird beschrieben durch</p>
 						<ul>
-							<li>einen Vektor $w$ der senkrecht zur Geraden steht</li>
-							<li>ein Abstandsmaß $w_0$</li>
+							<li>ein Vektor $w$ der senkrecht zur Geraden steht</li>
+							<li>ein "Abstandsmaß" $w_0$</li>
 						</ul>
 						<div id="linear-classifier-2"></div>
-						<p>Abstand zum Ursprung definiert als $- \frac {w_0} {|w|} $.</p>
+						<p>Abstand zum Ursprung definiert als $- \frac {w_0} {|w|^2} $.</p>
 
 					</section>
-					<section>
+					<section data-state="linear-classifier-3">
 						<p>Wenn Punkt $x_p$ auf der Geraden dann</p>
 						<p>$w^T x_p + w_0 = 0$</p>
+						<div id="linear-classifier-3"></div>
 					</section>
-					<section>
+					<section data-state="linear-classifier-4">
 						<p>Abstand eines Punktes $x$ von der Geraden ist</p>
 						<p>$\frac {w^T x + w_0} {|w|}$</p>
+						<div id="linear-classifier-4"></div>
 					</section>
+					<section data-state="linear-classifier-5">
+						<p>
+						Man könnte also sagen $w^T x + w_0$ ist so etwas wie der Abstand von $x$ zu der Geraden relativ zur Länge von $w$</p>
+						<div id="linear-classifier-5"></div>
+					</section>
+
 				</section>
 				<section>
+					<section>
 					<h3>Nach welcher Regel sollten wir die Gerade legen?</h3>
 					<p>Beispiel: Wähle $w$ und $w_0$ so, dass mindestens ein Punkt der einen Klasse auf der einen und mindestens ein Punkt der anderen Klasse auf der anderen Seite liegt.</p>
-				</section>
-				<section>
+					</section>
 					<section>
 						<p>Lege die Gerade so, dass möglichst wenige Punkte falsch klassifiziert werden.</p>
 					</section>
-					<section>
-						<h3>Kostenfunction:</h3>
-						<p>
-							$E(w,w_0) = \sum_i (w^T x_i + w_0 - t_i)^2$
-						</p>
-						<p>
-							Wobei $t_i$ entweder $1$ oder $-1$ ist, je nach Klasse des Datenpunktes $i$. 
-						</p>
-					</section>
-					<section>
-						<h3>Kostenfunction Minimieren:</h3>
-						<p>Wir können die Funktion in Matrix Form aufschreiben:</p>
-						<p>
-							$E(\tilde w) = \frac 1 2 (w^T x_i + w_0 - t_i)^2$
-						</p>
-					</section>
-					<section>
-						<h3>Kostenfunction Minimieren:</h3>
-						<p>
-							$\nabla E(w,w_0) = \sum_i 2(w^T x_i + w_0 - t_i)(\mathbf 1^T x_i) = 0$
-						</p>
-						<p>
-							$E^{\prime}(w,w_0) = \sum_i 2(w^T x_i + w_0 - t_i)(\mathbf 1^T x_i) = 0$
-						</p>
-
-					</section>
-
-				</section>
-				<section>
 					<section>
 						<p>Lege die Gerade so, dass ein möglichst breiter Saum die Gerade von den Punkten trennt.</p>
 					</section>
 				</section>
 				<section>
-					<h3>Kern der Linearen Klassifizierung:</h3>
-					<ul>
-						<li>Lege eine Gerade (Ebene,...) um Punkte verschiedener Klassen zu unterscheiden.</li>
-						<li>Hierzu gibt es verschiedene Strategien.</li>
-						<li>Um die genauen Koordinaten so einer Gerade zu finden löst man meist ein Optimierungsproblem.</li>
-					</ul>
-				</section>
-
-
-				<section><h3>Neural Networks</h3></section>
-				<section>
 					<script type="text/javascript">
-						Reveal.addEventListener( 'neural-net-1', function () { 
-							drawNeuralNet("#exampleNetwork-1", function(i,j) {return "w"+i+j});
+						Reveal.addEventListener( 'linear-classifier-6', function () { 
+							drawLinearClassification("#linear-classifier-6", perceptron);
+						} );
+						Reveal.addEventListener( 'linear-classifier-7', function () { 
+							drawLinearClassification("#linear-classifier-7", perceptron);
 						} );
 					</script>
 
 					<section>
-	    				<h3>Natürlichen Neuronale Netze...</h3>
-	    				<ul>
-	    					<li>Vielzahl miteinander verbundener Neuronen</li>
-	    					<li>Neuronen werden aktiviert und aktivieren selbst andere Neuronen</li>
-	    					<li>Das Netzwerk lernt durch Stärken/Schwächen von Verbindungen</li>
-	    				</ul>
+						<h3>Wie können wir dies formalisieren?</h3>
+						<p>...schließlich wollen wir einen Algorithmus!</p>
 					</section>
-					<section data-state="neural-net-1">
+					<section>
+						<h3>Kostenfunktionen</h3>
+					</section>
+					<section data-state="linear-classifier-6">
+						<p>Möglichst wenige Punkte falsch klassifizieren.</p>
+						<!-- <p>$E(w,w_0) = \sum_i \text{sign}(w^T x_i + w_0) - t_i$</p> -->
+						<!-- <p>$t_i$ ist entweder $1$ oder $-1$ je nach Klasse des Punktes</p> -->
+						<div id="linear-classifier-6"></div>
+						<p>$E(w,w_0)=...$</p>
 
-	    				<h3>... können als Inspiration dienen</h3>
-	    				<div id="exampleNetwork-1"></div>
 					</section>
-				</section>
-				<section>
-					<h3>Perceptron</h3>
-    				<ul>
-    					<li>Ein Beispiel für ein Machine Learning Verfahren</li>
-    					<li>Neuronen werden aktiviert und aktivieren selbst andere Neuronen</li>
-    					<li>Das Netzwerk lernt durch Stärken/Schwächen von Verbindungen</li>
-    				</ul>
+					<section data-state="linear-classifier-7">
+						<p>Möglichst breiter Rand um die Gerade.</p>
+						<!-- <p>$E(w,w_0) = - \text{min}_{i \in M}(w^T x_i + w_0)$</p> -->
+						<!-- <p>$M$ ist die Menge aller falsch klassifizierten Punkte</p> -->
+						<div id="linear-classifier-7"></div>
+						<p>$E(w,w_0)=...$</p>
+					</section>
 
 				</section>
 				<section>
@@ -391,40 +563,254 @@
 						} );
 
 					</script>					
+					<section>
+						<p>Wir wissen, wie man das Minimum von einfachen Funktionen berechnet.</p>
+
+						<p>Aber wie können wir solche "komplizierten" Kostenfunktionen minimieren?</p>
+					</section>
+					<section>
+						<p>Es kommt drauf an!</p>
+					</section>
+					<section>
+						<h3>Gradienten</h3>
+					</section>
 
 					<section data-state="gradient-descent-slide-1">
-					    <h2>Gradient Descent</h2>
 					    <p>Was tun, um das Minimum dieser Funktion zu finden?</p>
 					    <div id="gradientDescentGraph-1"></div>
 					</section>
 					<section data-state="gradient-descent-slide-2">
-					    <h2>Gradient Descent</h2>
-					    <p>Einen beliebigen Punkt wählen und die Richtung bestimmen wo es am steilsten bergab geht (Gradient).</p>
+					    <p>Einen beliebigen Punkt wählen und die Richtung bestimmen wo es am steilsten bergab geht (Negation vom Gradienten).</p>
 					    <div id="gradientDescentGraph-2"></div>
 					</section>
 					<section data-state="gradient-descent-slide-3">
-					    <h2>Gradient Descent</h2>
 					    <p>Einen Schritt in diese Richtung tun und erneut die Richtung bestimmen.</p>
+					    <p>$x^{(\text{neu})} = x^{(\text{alt})} - \alpha \nabla f(x^{(\text{alt})})$</p>
 					    <div id="gradientDescentGraph-3"></div>
 					</section>
 					<section data-state="gradient-descent-slide-4">
-					    <h2>Gradient Descent</h2>
 					    <p>Diesen Prozess wiederholen.</p>
+					 	<p>$x^{(\text{neu})} = x^{(\text{alt})} - \alpha \nabla f(x^{(\text{alt})})$</p>
 					    <div id="gradientDescentGraph-4"></div>
 					</section>
 					<section data-state="gradient-descent-slide-5">
-					    <h2>Gradient Descent</h2>
 					    <p>Diesen Prozess wiederholen.</p>
+					 	<p>$x^{(\text{neu})} = x^{(\text{alt})} - \alpha \nabla f(x^{(\text{alt})})$</p>
 					    <div id="gradientDescentGraph-5"></div>
 					</section>
 					<section data-state="gradient-descent-slide-6">
-					    <h2>Gradient Descent</h2>
 					    <p>Diesen Prozess wiederholen.</p>
+					 	<p>$x^{(\text{neu})} = x^{(\text{alt})} - \alpha \nabla f(x^{(\text{alt})})$</p>
 					    <div id="gradientDescentGraph-6"></div>
+					</section>
+					<section>
+						<p>Die Prozedur in mehreren Dimensionen</p>
+						<img data-src="gradient-descent.png" />
+					</section>
+					<section>
+						<h3>Probleme mit Gradient Descent</h3>
+						<ul>
+							<li>Muss ableitbar sein.</li>
+							<li>Eher langsam.</li>
+							<li>Lokale Minima.</li>
+						</ul>
+					</section>
+				</section>
+				<section>
+					<h3>Kern der Linearen Klassifizierung:</h3>
+					<ul>
+						<li>Lege eine Gerade (Ebene,...) um Punkte verschiedener Klassen zu unterscheiden.</li>
+						<li>Hierzu gibt es verschiedene Strategien.</li>
+						<li>Um die genauen Koordinaten so einer Gerade zu finden löst man meist ein Optimierungsproblem.</li>
+					</ul>
+				</section>
+
+				<section>
+					<section>
+						<h3>Klassifizierung ist ein statistisches Problem</h3>
+						<ul>
+							<li>Bedingte Wahrscheinlichkeiten und Satz von Bayes</li>
+							<li>Maximum Likelihood Fit</li>
+						</ul>
+					</section>
+
+					<section>
+						<p>Gegeben:</p>
+						<ul>
+							<li>Set von Trainingsdaten $D$</li>
+							<li>Model dass wir anwenden wollen mit Set von Parametern $\theta$</li>
+							<li>Punkt den wir klassifizieren wollen $x$</li>
+							<li>Klassen in denen die Punkte sein können $C$</li>
+						</ul>
+					</section>
+
+					<section>
+						<ul>
+							<li>Klassifizierung: $P(C = c | X=x, \theta )$</li>
+							<li>Training:
+								<ul>
+									<li>Maximum Likelihood: Maximiere $P(D | \theta )$</li>
+									<li>Maximum a-posteriori: $P(\theta | D )$ </li>
+								</ul>
+							</li>
+						</ul>
+					</section>
+					<section>
+						<p>Wie könnten wir die Klassifizierung mit einem Linearen Classifier interpretieren als
+						$P(C = c | X=x, \theta )$?</p> 
+					</section>
+					<section>
+						<ul>
+							<li>Wir bestimmen das Modell!</li>
+							<li>zB: Wahrscheinlichkeit für Klasse ist 1 oder 0 je nach Seite.</li>
+							<li><i>Oder:</i> Je größer der Abstand desto wahrscheinlicher die Klasse.</li>
+						</ul> 
+					</section>
+
+					<section>
+						<h3>Overfitting</h3>
 					</section>
 
 				</section>
-				<section>Backpropagation</section>
+
+
+				<section><h3>Neural Networks</h3></section>
+				<section>
+					<script type="text/javascript">
+						Reveal.addEventListener( 'neural-net-1', function () { 
+							drawNeuralNet("#exampleNetwork-1");
+						} );
+						Reveal.addEventListener( 'neural-net-2', function () { 
+							drawNeuralNet("#exampleNetwork-2");
+						} );
+
+					</script>
+
+					<section>
+	    				<h3>Natürlichen Neuronale Netze...</h3>
+	    				<ul>
+	    					<li>Vielzahl miteinander verbundener Neuronen</li>
+	    					<li>Neuronen werden aktiviert und aktivieren selbst andere Neuronen</li>
+	    					<li>Das Netzwerk lernt durch Stärken/Schwächen von Verbindungen</li>
+	    				</ul>
+					</section>
+					<section data-state="neural-net-1">
+
+	    				<h3>... können als Inspiration dienen</h3>
+	    				<div id="exampleNetwork-1"></div>
+					</section>
+					<section data-state="neural-net-2">
+	    				<ul>
+	    					<li>$w_{ij}$ ist Stärke der Verbindung von $i$ nach $j$</li>
+	    					<li>$w_{ij}$ kann auch negativ sein</li>
+	    					<li>Eingang von einem Neutron: Aktivierungsfunktion</li>
+	    					<li>Wir können Potentiale durchpropagieren</li>
+	    				</ul>
+	    				<div id="exampleNetwork-2"></div>
+					</section>
+
+				</section>
+				<section>
+					<script type="text/javascript">
+						Reveal.addEventListener( 'perceptron-1', function () { 
+							drawNeuralNet("#perceptron-1", 2, 1);
+						} );
+					</script>
+
+					<section data-state="perceptron-1">
+						<h3>Perceptron</h3>
+	    				<div id="perceptron-1"></div>
+    				</section>
+    				<section>
+    					<h3>Perceptron trainieren</h3>
+    					<p>Wir stellen eine Funktion auf die beschreibt wie viele Fehler das Perceptron macht.</p>
+    					<p>Dann finden wir die Kantengewichte die diese Funktion minimiert!</p>
+    				</section>
+    				<section>
+    					<p>$E(w) = \sum_i \text{sign}(w^T x_i) - t_i$</p>
+    					<p>Fällt etwas auf?</p>
+    				</section>
+
+				</section>
+				<section>
+					<script type="text/javascript">
+						Reveal.addEventListener( 'complex-net-1', function () { 
+							drawNeuralNet("#complex-net-1", 4, 3, 2);
+						} );
+					</script>
+
+
+					<section data-state="complex-net-1">
+					<h3>Komplexere Netzwerke</h3>
+					<ul>
+						<li>Perceptron ist etwas limitiert</li>
+						<li>Zum Beispiel: Kann kein xor repräsentieren</li>
+						<li>Idee: Mehr Ebenen!</li>
+						<div id="complex-net-1"></div>
+					</ul>
+					</section>
+					<section>
+						<p>$a_j = \sum_i w_ij x_i + w_{j0}$</p>
+						<p>$z_j = h(a_j)$</p>
+						<p>$o_k = \sum_j v_{jk} z_j + v_{k0}$<p>
+						<p>$y_k = h(o_k)$
+					</section>
+					<section><p>Flexibler...</p></section>
+
+					<section>
+						<p>...leider auch schwieriger zu trainieren, wir müssen $w$ und $v$ bestimmen.</p>
+						<p>$E(v,w) = \sum_n (y(x_n,w,v) - t_n)^2$<p>
+					</section>
+				</section>
+				<section>
+					<section>
+						<h3>Backpropagation</h3>
+						<p>Eine Lernmethode für Neuronale Netzwerken mit mehreren Ebenen.</p>
+					</section>
+
+					<section>
+						<h3>Kettenregel</h3>
+					</section>
+
+					<section>
+						<h3>Backpropagation = Gradient Descent + Kettenregel</h3>
+					</section>
+					<section>
+						<p>Wir wollen die folgende funktion mit gradient descent minimieren:</p>
+						<p>$E(v,w) = \sum_n (y(x_n,w,v) - t_n)^2$<p>
+						<p>Äquivalent: $E(v,w) = \frac 1 2 \sum_n (y(x_n,w,v) - t_n)^2$<p>
+					</section>
+					<section>
+						<p>Dafür brauchen wir den Gradienten der Funktion:</p>
+						<p>$\nabla E(v,w)$<p>
+					</section>
+					<section>
+						<p>Das Problem reduziert sich:</p>
+						<p>$\frac d {dv_{jk}} E(v,w) = \frac 1 2 \sum_n \frac d {dv_{jk}} (y(x_n,w,v) - t_n)^2$<p>
+						<p>Wir können auf jeden Datenpunkt einzeln gucken<br />(Ableitung einer Summe!)</p>
+						<p>$\frac d {dv_{jk}} E_n(v,w) = (y(x_n,w,v) - t_n)(\frac d {dv_{jk}} y(x_n,w,v))$</p>
+					</section>
+					<section>
+						<p>$\frac d {dv_{jk}} E_n(v,w) = (y(x_n,w,v) - t_n)(\frac d {dv_{jk}} y(x_n,w,v))$</p>
+						<p>$\frac d {dv_{jk}} y(x_n,w,v) = \frac d {dv_{jk}} h(\sum_j v_{jk} z_j + v_{k0})$</p>
+						<p>$= h^{\prime}(\sum_j v_{jk} z_j + v_{k0})z_j$</p>
+
+					</section>
+					<section>
+						Für $v$ können wir hier aufhören. Für $w$ müssen wir noch tiefer gehen!
+					</section>
+					<section>
+						<h3>Andere Sichtweise</h3>
+						<ul>
+							<li>Das Netzwerk hat einen Fehler gemacht.</li>
+							<li>Ein Gradient Descent Schritt ist so etwas wie Feedback.</li>
+							<li>Korrektur proportional zu der Größe des Fehlers.</li>
+							<li>Korrektur von Gewicht proportional zu Beitrag von dem Gewicht zum Fehler.</li>
+						</ul>
+					</section>
+
+				</section>
+
 
 			</div>
 		</div>
@@ -433,7 +819,6 @@
 			// More info https://github.com/hakimel/reveal.js#configuration
 			Reveal.initialize({
 				history: true,
-
 				// More info https://github.com/hakimel/reveal.js#dependencies
 				dependencies: [
 					{ src: '../plugin/markdown/marked.js' },
