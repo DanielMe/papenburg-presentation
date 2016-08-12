@@ -200,8 +200,9 @@
 				index: i
 			})
 		}
-		nodeScale=d3.scaleLinear().domain([0,1]).range(["red", "blue"]);
-		edgeScale=d3.scaleLinear().domain([-1,1]).range(["red", "green"]);
+		entryNodeScale=d3.scaleLinear().domain([-1,1]).range(["blue", "red"]);
+		nodeScale=d3.scaleLinear().domain([0,1]).range(["blue", "red"]);
+		edgeScale=d3.scaleLinear().domain([-1,1]).range(["black", "green"]);
 
 		function sigmoid(x) {
 			return 1 / (1+Math.pow(Math.E, -x));
@@ -216,7 +217,7 @@
 				for(i = 0; i < numLayer1; i+=1){
 					var edge = edges.find(function(e){return e.layer==0 && e.from==i && e.to==j;});
 					var from = nodes.find(function(n){return n.layer==0 && n.index==i});
-					to.input += from.value * edge.value;
+					to.input += from.value * edge.value - 0.5;
 				}
 				to.value = sigmoid(to.input);
 			}
@@ -226,7 +227,7 @@
 				for(i = 0; i < numLayer2; i+=1){
 					var edge = edges.find(function(e){return e.layer==1 && e.from==i && e.to==j;});
 					var from = nodes.find(function(n){return n.layer==1 && n.index==i});
-					to.input += from.value * edge.value;
+					to.input += from.value * edge.value - 0.5;
 				}
 				to.value = sigmoid(to.input);
 			}
@@ -262,7 +263,7 @@
 					.append("textPath")
 					.attr("xlink:href", function(d) {return "#"+d.id;})
 					.attr("startOffset", "50%")
-					.text(function(d) {return d.label;})
+					.text(function(d) {return parseFloat(d.value).toFixed(2);})
 					.on("click", function(d) { 
 						d.value += 0.2;
 						propagate();
@@ -274,12 +275,14 @@
 						propagate();
 						update();
 					});
+			svg.selectAll("text").data(edges)
+				.selectAll("textPath").text(function(d) {return parseFloat(d.value).toFixed(2);});
 
 			svg.selectAll("circle").data(nodes)
-				.attr("style", function(d) { return "fill: "+nodeScale(d.value)+";";})
+				.attr("style", function(d) {return "fill: "+nodeScale(d.value)+";"; } )
 				.enter()
 					.append("circle")
-					.attr("style", function(d) { return "fill: "+nodeScale(d.value)+";";})
+					.attr("style", function(d) {return "fill: "+nodeScale(d.value)+";"; } )
 					.attr("cx",function(d) {return d.x;})
 					.attr("cy",function(d) {return d.y;})
 					.attr("r",25)
@@ -298,6 +301,47 @@
 							update();
 						}
 					});
+
+			function sigmoidGraph(node) {
+				var xscale = d3.scaleLinear().domain([-10,10]).range([node.x - 35, node.x + 35]);
+				var yscale = d3.scaleLinear().domain([0,1]).range([node.y - 30, node.y - 60]);
+				var line = d3.line()
+					.x(function(x){return xscale(x)})
+					.y(function(x){return yscale(sigmoid(x));});
+				return line(d3.range(-10,10,0.1))
+			}
+
+			function markerx(node) {
+				var xscale = d3.scaleLinear().domain([-10,10]).range([node.x - 35, node.x + 35]);
+				return xscale(node.input);
+			}
+
+			function markery(node) {
+				var yscale = d3.scaleLinear().domain([0,1]).range([node.y - 30, node.y - 60]);
+				return yscale(sigmoid(node.input));
+			}
+
+
+			svg.selectAll(".minigraph")
+				.data(nodes.filter(function(d) {return d.layer > 0;}))
+				.enter()
+					.append("path")
+					.attr("d", sigmoidGraph)
+					.attr("style","stroke:grey;")
+					.attr("class","minigraph")
+			
+			svg.selectAll(".minigraph-marker")
+				.data(nodes.filter(function(d) {return d.layer > 0;}))
+				.attr("cx", markerx)
+				.attr("cy", markery)
+				.enter()
+					.append("circle")
+					.attr("style", function(d) { return "fill: red";})
+					.attr("cx", markerx)
+					.attr("cy", markery)
+					.attr("r",4)
+					.attr("class","minigraph-marker")
+
 		}
 		propagate();
 		update();
@@ -355,6 +399,8 @@
 					.attr("r", 8)
 					.attr("cx", function (d) {return scale(d.x); })
 					.attr("cy", function (d) {return scale(d.y); })
+					.on("click", function (d) {
+					})
 				.exit().remove();
 
 			var lineParams = calculateLine(data);
@@ -473,7 +519,8 @@
 							<li>ein "Abstandsmaß" $w_0$</li>
 						</ul>
 						<div id="linear-classifier-2"></div>
-						<p>Abstand zum Ursprung definiert als $- \frac {w_0} {|w|^2} $.</p>
+						<p>Distanz zum Ursprung definiert als $- \frac {w_0} {|w|}$. <br />
+						Der "Stützvektor" vom Ursprung ist $d_0 = -\frac {w_0} {|w|} \frac {1} {|w|} w$</p>
 
 					</section>
 					<section data-state="linear-classifier-3">
@@ -483,8 +530,9 @@
 					</section>
 					<section data-state="linear-classifier-4">
 						<p>Abstand eines Punktes $x$ von der Geraden ist</p>
-						<p>$\frac {w^T x + w_0} {|w|}$</p>
+						<p>$d = \frac {w^T x + w_0} {|w|}$</p>
 						<div id="linear-classifier-4"></div>
+						<p>Noch besser: $d$ hat ein Vorzeichen!</p>
 					</section>
 					<section data-state="linear-classifier-5">
 						<p>
@@ -502,7 +550,7 @@
 						<p>Lege die Gerade so, dass möglichst wenige Punkte falsch klassifiziert werden.</p>
 					</section>
 					<section>
-						<p>Lege die Gerade so, dass ein möglichst breiter Saum die Gerade von den Punkten trennt.</p>
+						<p>Lege die Gerade so, dass ein möglichst breiter Rand die Gerade von den Punkten trennt.</p>
 					</section>
 				</section>
 				<section>
@@ -624,40 +672,34 @@
 						<li>Um die genauen Koordinaten so einer Gerade zu finden löst man meist ein Optimierungsproblem.</li>
 					</ul>
 				</section>
-
 				<section>
 					<section>
 						<h3>Klassifizierung ist ein statistisches Problem</h3>
-						<ul>
-							<li>Bedingte Wahrscheinlichkeiten und Satz von Bayes</li>
-							<li>Maximum Likelihood Fit</li>
-						</ul>
 					</section>
-
+					<section><h3>Bedingte Wahrscheinlichkeiten und Satz von Bayes</h3></section>
 					<section>
-						<p>Gegeben:</p>
+						<p align="left">
+							Im Mittel sagt der Wetterbericht für den kommenden Tag zu 60% schönes und zu 40% schlechtes Wetter voraus; die Trefferquote liegt für die Voraussage “schön” bei 80% und für die Voraussage “schlecht” bei 90%.
+						</p>
 						<ul>
-							<li>Set von Trainingsdaten $D$</li>
-							<li>Model dass wir anwenden wollen mit Set von Parametern $\theta$</li>
-							<li>Punkt den wir klassifizieren wollen $x$</li>
-							<li>Klassen in denen die Punkte sein können $C$</li>
+							<li>Wieviel % schöne Tage gibt es?</li>
+							<li>Trotz schönen Wetters ist Kumpel $K$ nicht zum verabredeten Fallschirmsprung erschienen mit dem Hinweis, der gestrige Wetterbericht wäre schlecht gewesen, so dass er anders disponierte.
+							Mit welcher Wahrscheinlichkeit war dies bei Unkenntnis des gestrigen Wetterberichts nur eine Ausrede?</li>
 						</ul>
+						</p>
 					</section>
-
 					<section>
+						<p>"Ereignisse" beim Klassifizieren:</p>
 						<ul>
-							<li>Klassifizierung: $P(C = c | X=x, \theta )$</li>
-							<li>Training:
-								<ul>
-									<li>Maximum Likelihood: Maximiere $P(D | \theta )$</li>
-									<li>Maximum a-posteriori: $P(\theta | D )$ </li>
-								</ul>
-							</li>
+							<li>Die Trainingsdaten so sind wie beobachtet $D$</li>
+							<li>Die Parameter $\Theta$ haben den Wert $\theta$</li>
+							<li>Der Punkt $X$ den wir klassifizieren hat den Wert $x$</li>
+							<li>Die Klasse des Punktes $C$ ist $c$</li>
 						</ul>
 					</section>
 					<section>
-						<p>Wie könnten wir die Klassifizierung mit einem Linearen Classifier interpretieren als
-						$P(C = c | X=x, \theta )$?</p> 
+						<p>Klassifizierung: $P(C = c | X=x, \Theta=\theta )$</p>
+						<p>Wie könnten wir die Klassifizierung mit einem Linearen Classifier so interpretieren?</p>
 					</section>
 					<section>
 						<ul>
@@ -666,13 +708,42 @@
 							<li><i>Oder:</i> Je größer der Abstand desto wahrscheinlicher die Klasse.</li>
 						</ul> 
 					</section>
-
+					<section>
+						<img data-src="sigmoid.png" />
+					</section>
+					<section>
+						<p>Maximum Likelihood: Maximiere $P(D | \Theta=\theta )$</p>
+						<img class="fragment fade-down" src="logisticregression.png">
+					</section>
+					<section>
+						<p align="left">
+						$\sigma(t) = \frac 1 {1+e^{-t}}$<br /><br />
+						$P(C=1 | X=x, \Theta=\theta ) = \sigma(w^T x + w_0)$
+						</p>
+					</section>
+					<section><h3>Maximum Likelihood</h3></section>
+					<section>
+						<ul>
+						<li>Maximum a-posteriori: $P(\Theta=\theta | D )$ </li>
+						<li class="fragment fade-down">$P(\Theta=\theta | D ) = \frac {P( D | \Theta=\theta )P(\Theta=\theta)} {N}$</li>
+						<li class="fragment fade-down">$N$ hängt nicht von $\theta$ ab, d.h. für maximierung nicht relevant.</li>
+						</ul>
+					</section>
+					<section>
+						<h3>Frequentists vs Bayesians</h3>
+					</section>
+					<section>
+						<img src="frequentists_vs_bayesians.png">
+					</section>
+				</section>
+				<section>
 					<section>
 						<h3>Overfitting</h3>
 					</section>
-
+					<section>
+						<iframe width="560" height="315" src="https://www.youtube.com/embed/DQWI1kvmwRg" frameborder="0" allowfullscreen></iframe>
+					</section>
 				</section>
-
 
 				<section><h3>Neural Networks</h3></section>
 				<section>
@@ -703,7 +774,7 @@
 	    				<ul>
 	    					<li>$w_{ij}$ ist Stärke der Verbindung von $i$ nach $j$</li>
 	    					<li>$w_{ij}$ kann auch negativ sein</li>
-	    					<li>Eingang von einem Neutron: Aktivierungsfunktion</li>
+	    					<li>Eingang von einem Neuron: Aktivierungsfunktion</li>
 	    					<li>Wir können Potentiale durchpropagieren</li>
 	    				</ul>
 	    				<div id="exampleNetwork-2"></div>
@@ -713,7 +784,7 @@
 				<section>
 					<script type="text/javascript">
 						Reveal.addEventListener( 'perceptron-1', function () { 
-							drawNeuralNet("#perceptron-1", 2, 1);
+							drawNeuralNet("#perceptron-1", 3, 1);
 						} );
 					</script>
 
@@ -727,8 +798,13 @@
     					<p>Dann finden wir die Kantengewichte die diese Funktion minimiert!</p>
     				</section>
     				<section>
-    					<p>$E(w) = \sum_i \text{sign}(w^T x_i) - t_i$</p>
-    					<p>Fällt etwas auf?</p>
+    					<h3>Output vom Perceptron:</h3>
+    				    <p class="fragment fade-down">$y = \sigma(w^T x)$</p>
+    				    <p class="fragment fade-down">$y = \text{step}(w^T x)$</p>
+    				</section>
+    				<section>
+    					<h3>Mind blown!</h3>
+    					<img src="mind-blown.gif">
     				</section>
 
 				</section>
@@ -743,17 +819,17 @@
 					<section data-state="complex-net-1">
 					<h3>Komplexere Netzwerke</h3>
 					<ul>
-						<li>Perceptron ist etwas limitiert</li>
-						<li>Zum Beispiel: Kann kein xor repräsentieren</li>
+						<li>Perceptron ist etwas limitiert.</li>
+						<li>Nur lineare Funktionen.</li>
 						<li>Idee: Mehr Ebenen!</li>
 						<div id="complex-net-1"></div>
 					</ul>
 					</section>
 					<section>
 						<p>$a_j = \sum_i w_ij x_i + w_{j0}$</p>
-						<p>$z_j = h(a_j)$</p>
+						<p>$z_j = \sigma(a_j)$</p>
 						<p>$o_k = \sum_j v_{jk} z_j + v_{k0}$<p>
-						<p>$y_k = h(o_k)$
+						<p>$y_k = \sigma(o_k)$
 					</section>
 					<section><p>Flexibler...</p></section>
 
@@ -761,19 +837,19 @@
 						<p>...leider auch schwieriger zu trainieren, wir müssen $w$ und $v$ bestimmen.</p>
 						<p>$E(v,w) = \sum_n (y(x_n,w,v) - t_n)^2$<p>
 					</section>
-				</section>
-				<section>
 					<section>
 						<h3>Backpropagation</h3>
 						<p>Eine Lernmethode für Neuronale Netzwerken mit mehreren Ebenen.</p>
+						<p class="fragment fade-down">Backpropagation = Gradient Descent + Kettenregel</p>
 					</section>
-
 					<section>
-						<h3>Kettenregel</h3>
-					</section>
-
-					<section>
-						<h3>Backpropagation = Gradient Descent + Kettenregel</h3>
+						<h3>Andere Sichtweise</h3>
+						<ul>
+							<li>Das Netzwerk hat einen Fehler gemacht.</li>
+							<li>Ein Gradient Descent Schritt ist so etwas wie Feedback.</li>
+							<li>Korrektur proportional zu der Größe des Fehlers.</li>
+							<li>Korrektur von Gewicht proportional zu Beitrag von dem Gewicht zum Fehler.</li>
+						</ul>
 					</section>
 					<section>
 						<p>Wir wollen die folgende funktion mit gradient descent minimieren:</p>
@@ -799,16 +875,6 @@
 					<section>
 						Für $v$ können wir hier aufhören. Für $w$ müssen wir noch tiefer gehen!
 					</section>
-					<section>
-						<h3>Andere Sichtweise</h3>
-						<ul>
-							<li>Das Netzwerk hat einen Fehler gemacht.</li>
-							<li>Ein Gradient Descent Schritt ist so etwas wie Feedback.</li>
-							<li>Korrektur proportional zu der Größe des Fehlers.</li>
-							<li>Korrektur von Gewicht proportional zu Beitrag von dem Gewicht zum Fehler.</li>
-						</ul>
-					</section>
-
 				</section>
 
 
