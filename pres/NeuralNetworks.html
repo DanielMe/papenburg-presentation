@@ -26,6 +26,15 @@
 		<script src="../js/math.min.js"></script>
 
 		<style>
+			svg {
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				-khtml-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+
 			.chart path {
 				stroke: steelblue;
 				fill: none;
@@ -885,6 +894,8 @@
 			// More info https://github.com/hakimel/reveal.js#configuration
 			Reveal.initialize({
 				history: true,
+				minScale: 1,
+				maxScale: 1,
 				// More info https://github.com/hakimel/reveal.js#dependencies
 				dependencies: [
 					{ src: '../plugin/markdown/marked.js' },
